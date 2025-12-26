@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Support Call-Out Assistant</title>
+
+<!-- Montserrat -->
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+:root {
+  --primary: #0B2545;
+  --secondary: #8DA9C4;
+  --bg: #EEF4ED;
+  --white: #ffffff;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  font-family: 'Montserrat', system-ui, sans-serif;
+  color: var(--primary);
+}
+
+.app {
+  max-width: 720px;
+  margin: auto;
+  padding: 16px;
+}
+
+h1 {
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 16px;
+}
+
+label {
+  font-size: 13px;
+  font-weight: 600;
+  margin-top: 14px;
+  display: block;
+}
+
+input, select {
+  width: 100%;
+  padding: 12px;
+  font-size: 15px;
+  border-radius: 10px;
+  border: 1px solid var(--secondary);
+  margin-top: 6px;
+  font-family: inherit;
+}
+
+.panel {
+  background: var(--white);
+  border-radius: 14px;
+  padding: 14px;
+  margin-top: 16px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+}
+
+.panel h2 {
+  font-size: 15px;
+  margin: 0 0 10px;
+  font-weight: 700;
+}
+
+.actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+button {
+  padding: 14px;
+  font-size: 14px;
+  font-weight: 700;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.primary {
+  background: var(--primary);
+  color: white;
+  grid-column: 1 / -1;
+}
+
+.secondary {
+  background: var(--secondary);
+  color: var(--primary);
+}
+
+button:disabled { opacity: 0.6; }
+
+.transcript-line {
+  font-size: 13px;
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+.key { font-weight: 700; }
+.mono {
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+}
+
+@media (min-width: 768px) {
+  h1 { font-size: 22px; }
+  .actions { grid-template-columns: repeat(3, 1fr); }
+  .primary { grid-column: span 3; }
+}
+</style>
+</head>
+
+<body>
+<div class="app">
+
+<h1>Support Call-Out Assistant</h1>
+
+<label>Customer Name</label>
+<input id="name" placeholder="e.g. ABC">
+
+<label>Email Address</label>
+<input id="email" placeholder="e.g. abc@gmail.com">
+
+<label>Phone Number</label>
+<input id="phone" placeholder="e.g. 888888">
+
+<div class="panel">
+  <h2>Voice & Delivery</h2>
+
+  <label>Accent / Voice</label>
+  <select id="voiceSelect"></select>
+  <div id="voiceStatus" style="font-size:12px;color:#8DA9C4;margin-top:6px;">
+    Tap anywhere to load voices
+  </div>
+
+  <label>Pace</label>
+  <select id="rateSelect">
+    <option value="0.75">Slow</option>
+    <option value="0.9">Clear</option>
+    <option value="1" selected>Normal</option>
+    <option value="1.15">Fast</option>
+  </select>
+
+  <label>Pause Between Segments</label>
+  <select id="gapSelect">
+    <option value="0">None</option>
+    <option value="300">300 ms</option>
+    <option value="600" selected>600 ms</option>
+    <option value="1000">1 sec</option>
+  </select>
+</div>
+
+<div class="actions">
+  <button id="btnStart" class="primary" onclick="startCallout()">Call Out Details</button>
+  <button id="btnPause" class="secondary" onclick="pauseCallout()">Pause</button>
+  <button id="btnResume" class="secondary" onclick="resumeCallout()">Resume</button>
+  <button id="btnStop" class="secondary" onclick="stopCallout()">Stop</button>
+  <button id="btnRepeatAll" class="secondary" onclick="repeatAll()">Repeat All</button>
+  <button id="btnRepeatSection" class="secondary" onclick="repeatSection()">Repeat Section</button>
+</div>
+
+<div class="panel" id="transcriptPanel" style="display:none;">
+  <h2>Call-Out Transcript</h2>
+  <div class="transcript-line"><span class="key">Name:</span> <span class="mono" id="nameText"></span></div>
+  <div class="transcript-line"><span class="key">Email:</span> <span class="mono" id="emailText"></span></div>
+  <div class="transcript-line"><span class="key">Phone:</span> <span class="mono" id="phoneText"></span></div>
+</div>
+
+</div>
+
+<script>
+/* =======================
+   PHONETIC MAP
+======================= */
+const NATO = {
+  A:"Alpha",B:"Bravo",C:"Charlie",D:"Delta",E:"Echo",
+  F:"Foxtrot",G:"Golf",H:"Hotel",I:"India",J:"Juliet",
+  K:"Kilo",L:"Lima",M:"Mike",N:"November",
+  O:"Oscar",P:"Papa",Q:"Quebec",R:"Romeo",
+  S:"Sierra",T:"Tango",U:"Uniform",V:"Victor",
+  W:"Whiskey",X:"X-ray",Y:"Yankee",Z:"Zulu"
+};
+const DIGITS = {
+  0:"Zero",1:"One",2:"Two",3:"Three",4:"Four",
+  5:"Five",6:"Six",7:"Seven",8:"Eight",9:"Nine"
+};
+
+function phoneticWord(v) {
+  return v.toUpperCase().split("").filter(c=>NATO[c]).map(c=>NATO[c]).join(" – ");
+}
+function phoneticEmail(v) {
+  const r=[];
+  for(const c of v.toUpperCase()){
+    if(NATO[c]) r.push(NATO[c]);
+    else if(DIGITS[c]) r.push(DIGITS[c]);
+    else if(c==="@") r.push("at");
+    else if(c===".") r.push("dot");
+  }
+  return r.join(" – ");
+}
+function phoneticPhone(v){
+  return v.split("").filter(c=>DIGITS[c]).map(c=>DIGITS[c]).join(" – ");
+}
+
+/* =======================
+   SPEECH ENGINE
+======================= */
+let voices=[], selectedVoice=null;
+let plan=[], index=0, running=false;
+
+function speak(text){
+  const u=new SpeechSynthesisUtterance(text);
+  u.rate=parseFloat(rateSelect.value);
+  if(selectedVoice) u.voice=selectedVoice;
+  return u;
+}
+
+function next(){
+  if(!running || index>=plan.length){ running=false; return; }
+  const gap=parseInt(gapSelect.value);
+  const u=speak(plan[index++]);
+  u.onend=()=>setTimeout(next,gap);
+  speechSynthesis.speak(u);
+}
+
+function startCallout(){
+  speechSynthesis.cancel();
+  plan=[];
+  index=0;
+
+const nameEl = document.getElementById("name");
+const emailEl = document.getElementById("email");
+const phoneEl = document.getElementById("phone");
+
+const n = nameEl ? nameEl.value.trim() : "";
+const e = emailEl ? emailEl.value.trim() : "";
+const p = phoneEl ? phoneEl.value.trim() : "";
+
+
+
+  if(n){ plan.push("Customer name"); plan.push(phoneticWord(n)); nameText.innerText=phoneticWord(n); }
+  if(e){ plan.push("Email address"); plan.push(phoneticEmail(e)); emailText.innerText=phoneticEmail(e); }
+  if(p){ plan.push("Phone number"); plan.push(phoneticPhone(p)); phoneText.innerText=phoneticPhone(p); }
+
+  transcriptPanel.style.display="block";
+  if(plan.length){ running=true; next(); }
+}
+
+function pauseCallout(){ speechSynthesis.pause(); }
+function resumeCallout(){ speechSynthesis.resume(); }
+function stopCallout(){ speechSynthesis.cancel(); running=false; }
+function repeatAll(){ startCallout(); }
+function repeatSection(){ index=Math.max(0,index-2); next(); }
+
+/* =======================
+   VOICES
+======================= */
+function loadVoices(){
+  voices=speechSynthesis.getVoices();
+  if(!voices.length) return;
+
+  voiceSelect.innerHTML="";
+  voices.forEach(v=>{
+    const o=document.createElement("option");
+    o.value=v.name;
+    o.textContent=`${v.name} — ${v.lang}${v.localService?" (offline)":""}`;
+    voiceSelect.appendChild(o);
+  });
+
+  selectedVoice=voices[0];
+  voiceSelect.value=selectedVoice.name;
+  voiceStatus.innerText=`${voices.length} voice(s) available`;
+}
+
+voiceSelect.addEventListener("change",()=>{
+  selectedVoice=voices.find(v=>v.name===voiceSelect.value);
+});
+
+speechSynthesis.onvoiceschanged=loadVoices;
+document.body.addEventListener("click",loadVoices,{once:true});
+</script>
+
+</body>
+</html>
